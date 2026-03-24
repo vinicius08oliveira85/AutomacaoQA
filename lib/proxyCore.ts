@@ -1,5 +1,8 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
+import { PROXY_UA } from "./proxyProbe";
+
+export { probeTargetUrl } from "./proxyProbe";
 
 function escapeHtml(s: string) {
   return s
@@ -36,9 +39,6 @@ export function proxyErrorHtml(message: string) {
 </body>
 </html>`;
 }
-
-export const PROXY_UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
 
 const RECORDING_SCRIPT = `
         <script>
@@ -126,34 +126,6 @@ const RECORDING_SCRIPT = `
           })();
         </script>
       `;
-
-export async function probeTargetUrl(targetUrl: string): Promise<{ ok: boolean; message?: string }> {
-  try {
-    new URL(targetUrl);
-  } catch {
-    return { ok: false, message: "URL inválida" };
-  }
-  try {
-    const response = await axios.get(targetUrl, {
-      headers: { "User-Agent": PROXY_UA },
-      timeout: 10000,
-      maxRedirects: 5,
-      validateStatus: () => true,
-      maxContentLength: 2 * 1024 * 1024,
-    });
-    if (response.status >= 400) {
-      return { ok: false, message: `HTTP ${response.status} ao acessar a URL` };
-    }
-    return { ok: true };
-  } catch (error: unknown) {
-    const err = error as { message?: string; code?: string; response?: { status?: number } };
-    if (err.response?.status) {
-      return { ok: false, message: `HTTP ${err.response.status} ao acessar a URL` };
-    }
-    const msg = err.code === "ECONNABORTED" ? "Tempo esgotado" : err.message || "Falha de rede";
-    return { ok: false, message: msg };
-  }
-}
 
 /** Busca a página, injeta script de gravação e reescreve URLs relativas. */
 export async function fetchAndInjectProxyHtml(targetUrl: string): Promise<string> {
