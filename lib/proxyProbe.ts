@@ -45,15 +45,22 @@ export async function probeTargetUrl(targetUrl: string): Promise<{ ok: boolean; 
 
   try {
     for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
-      const res = await fetch(currentUrl, {
-        method: "GET",
-        headers: {
-          "User-Agent": PROXY_UA,
-          Accept: "*/*",
-        },
-        redirect: "manual",
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      });
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      let res: Response;
+      try {
+        res = await fetch(currentUrl, {
+          method: "GET",
+          headers: {
+            "User-Agent": PROXY_UA,
+            Accept: "*/*",
+          },
+          redirect: "manual",
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(t);
+      }
 
       if (res.status >= 300 && res.status < 400) {
         const loc = res.headers.get("location");

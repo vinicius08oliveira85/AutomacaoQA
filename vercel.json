@@ -5,7 +5,10 @@
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "functions": {
-    "api/*.ts": {
+    "api/proxy-health.ts": {
+      "includeFiles": "lib/**"
+    },
+    "api/proxy.ts": {
       "includeFiles": "lib/**"
     }
   }
