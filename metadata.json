@@ -1,0 +1,5 @@
+{
+  "name": "WebFlow Automator",
+  "description": "A low-code automation builder for web testing and automation, featuring recording, inspection, and replay capabilities.",
+  "requestFramePermissions": []
+}
