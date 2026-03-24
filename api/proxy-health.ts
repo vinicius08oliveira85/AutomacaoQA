@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { probeTargetUrl } from "../lib/proxyProbe";
+import { probeTargetUrl } from "../shared/proxyProbe";
 
 export const config = {
   maxDuration: 30,

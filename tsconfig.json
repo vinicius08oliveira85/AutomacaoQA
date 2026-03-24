@@ -28,6 +28,7 @@
     "src/**/*.tsx",
     "api/**/*.ts",
     "lib/**/*.ts",
+    "shared/**/*.ts",
     "*.ts"
   ]
 }

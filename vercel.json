@@ -5,11 +5,16 @@
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "functions": {
+    "api/ping.ts": {
+      "runtime": "nodejs20.x"
+    },
     "api/proxy-health.ts": {
-      "includeFiles": "lib/**"
+      "includeFiles": "shared/**",
+      "runtime": "nodejs20.x"
     },
     "api/proxy.ts": {
-      "includeFiles": "lib/**"
+      "includeFiles": "lib/**",
+      "runtime": "nodejs20.x"
     }
   }
 }
