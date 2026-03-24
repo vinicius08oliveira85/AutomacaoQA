@@ -13,7 +13,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { io, type Socket } from "socket.io-client";
-import { apiUrl, SOCKET_ENABLED } from "./apiBase";
+import { apiUrl, SOCKET_ENABLED, parseProxyHealthResponse } from "./apiBase";
 import type { Step, InspectorData, AppSettings } from "./types";
 import { loadSettings, saveSettings } from "./settingsStorage";
 import { parseStepsJson, newStepId } from "./stepImport";
@@ -64,7 +64,7 @@ export default function App() {
         const r = await fetch(
           apiUrl(`/api/proxy-health?url=${encodeURIComponent(targetUrl)}`)
         );
-        const data = (await r.json()) as { ok: boolean; message?: string };
+        const data = await parseProxyHealthResponse(r);
         if (!data.ok) {
           setProxyError(data.message || "Não foi possível verificar a URL");
           return false;
