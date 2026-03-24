@@ -7,6 +7,16 @@ const MAX_REDIRECTS = 5;
 const TIMEOUT_MS = 10_000;
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
+/** Evita `res.body?.cancel().catch` — com body null vira `undefined.catch` e lança TypeError. */
+async function cancelResponseBody(body: Response["body"]): Promise<void> {
+  if (!body || typeof body.cancel !== "function") return;
+  try {
+    await body.cancel();
+  } catch {
+    /* ignore */
+  }
+}
+
 async function drainResponseBody(res: Response, maxBytes: number): Promise<void> {
   const body = res.body;
   if (!body) return;
@@ -64,7 +74,7 @@ export async function probeTargetUrl(targetUrl: string): Promise<{ ok: boolean; 
 
       if (res.status >= 300 && res.status < 400) {
         const loc = res.headers.get("location");
-        await res.body?.cancel().catch(() => {});
+        await cancelResponseBody(res.body);
         if (!loc) {
           return { ok: false, message: `HTTP ${res.status} sem cabeçalho Location` };
         }
@@ -80,7 +90,7 @@ export async function probeTargetUrl(targetUrl: string): Promise<{ ok: boolean; 
       }
 
       if (res.status >= 400) {
-        await res.body?.cancel().catch(() => {});
+        await cancelResponseBody(res.body);
         return { ok: false, message: `HTTP ${res.status} ao acessar a URL` };
       }
 

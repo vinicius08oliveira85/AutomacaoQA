@@ -29,9 +29,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     sendJson(res, 200, result);
   } catch (err) {
     console.error("[proxy-health]", err);
-    sendJson(res, 500, {
-      ok: false,
-      message: "Erro interno ao verificar a URL. Veja os logs da função.",
-    });
+    try {
+      sendJson(res, 500, {
+        ok: false,
+        message: "Erro interno ao verificar a URL. Veja os logs da função.",
+      });
+    } catch (sendErr) {
+      console.error("[proxy-health] falha ao enviar 500", sendErr);
+    }
   }
 }
