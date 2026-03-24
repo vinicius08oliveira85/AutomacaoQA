@@ -12,7 +12,8 @@ import {
   Loader2,
   ExternalLink,
 } from "lucide-react";
-import { io } from "socket.io-client";
+import { io, type Socket } from "socket.io-client";
+import { apiUrl, SOCKET_ENABLED } from "./apiBase";
 import type { Step, InspectorData, AppSettings } from "./types";
 import { loadSettings, saveSettings } from "./settingsStorage";
 import { parseStepsJson, newStepId } from "./stepImport";
@@ -23,7 +24,12 @@ import { ImportChoiceModal } from "./components/ImportChoiceModal";
 import { ImportExportControls } from "./components/ImportExportControls";
 import { StepList } from "./components/StepList";
 
-const socket = io();
+const socketUrl = import.meta.env.VITE_SOCKET_URL as string | undefined;
+const socket: Socket | null = SOCKET_ENABLED
+  ? socketUrl
+    ? io(socketUrl)
+    : io()
+  : null;
 
 export default function App() {
   const [appSettings, setAppSettings] = useState<AppSettings>(() => loadSettings());
@@ -55,14 +61,16 @@ export default function App() {
       setProxyError(null);
       setNavChecking(true);
       try {
-        const r = await fetch(`/api/proxy-health?url=${encodeURIComponent(targetUrl)}`);
+        const r = await fetch(
+          apiUrl(`/api/proxy-health?url=${encodeURIComponent(targetUrl)}`)
+        );
         const data = (await r.json()) as { ok: boolean; message?: string };
         if (!data.ok) {
           setProxyError(data.message || "Não foi possível verificar a URL");
           return false;
         }
         setUrl(targetUrl);
-        setCurrentUrl(`/api/proxy?url=${encodeURIComponent(targetUrl)}`);
+        setCurrentUrl(apiUrl(`/api/proxy?url=${encodeURIComponent(targetUrl)}`));
         if (options?.replaceStepsWithInitialNav) {
           setSteps([
             {
@@ -130,7 +138,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    socket.on("replay_status", (data: {
+    if (!socket) return;
+
+    const onReplayStatus = (data: {
       message?: string;
       type: string;
       stepId?: string;
@@ -156,10 +166,11 @@ export default function App() {
       if (data.type === "success" || data.type === "error") {
         setIsReplaying(false);
       }
-    });
+    };
 
+    socket.on("replay_status", onReplayStatus);
     return () => {
-      socket.off("replay_status");
+      socket.off("replay_status", onReplayStatus);
     };
   }, []);
 
@@ -182,15 +193,29 @@ export default function App() {
   };
 
   const runReplay = async () => {
+    if (!socket) {
+      setLogs([
+        {
+          message:
+            "Replay com Playwright não está disponível aqui (sem Socket.IO). Use npm run dev localmente ou hospede o backend completo. Na Vercel você pode gravar e exportar o JSON.",
+          type: "info",
+        },
+      ]);
+      return;
+    }
+
     setIsReplaying(true);
     setLogs([]);
     setSteps((prev) => prev.map((s) => ({ ...s, status: "pending" })));
 
     try {
-      const res = await fetch("/api/replay", {
+      const res = await fetch(apiUrl("/api/replay"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ steps: stepsRef.current }),
+        body: JSON.stringify({
+          steps: stepsRef.current,
+          replayOrigin: window.location.origin,
+        }),
       });
       if (!res.ok) {
         const errBody = (await res.json().catch(() => null)) as { message?: string } | null;
@@ -355,7 +380,12 @@ export default function App() {
             <button
               type="button"
               onClick={runReplay}
-              disabled={isReplaying || steps.length === 0}
+              disabled={isReplaying || steps.length === 0 || !socket}
+              title={
+                !socket
+                  ? "Replay exige backend Node com Socket.IO (npm run dev)"
+                  : undefined
+              }
               className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-xs"
             >
               <Play size={14} fill="currentColor" /> Replay

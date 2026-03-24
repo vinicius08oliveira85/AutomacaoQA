@@ -6,13 +6,18 @@ import {defineConfig, loadEnv} from 'vite';
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
+    root: path.resolve(__dirname),
     plugins: [react(), tailwindcss()],
+    css: {
+      postcss: path.resolve(__dirname, "postcss.config.mjs"),
+    },
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
     },
     resolve: {
+      dedupe: ["tailwindcss"],
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        "@": path.resolve(__dirname, "."),
       },
     },
     server: {
