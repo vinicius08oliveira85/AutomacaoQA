@@ -1,8 +1,39 @@
 /**
  * HTML da página alvo com script de gravação injetado — usado pelo Express (dev) e pelas funções Vercel.
  */
-import axios from "axios";
+import axios, { isAxiosError } from "axios";
 import * as cheerio from "cheerio";
+
+/** Limite de corpo da resposta (evita OOM em serverless). */
+const MAX_BODY_BYTES = 3 * 1024 * 1024;
+
+const CHROME_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+export class ProxyFetchError extends Error {
+  readonly statusCode: number;
+
+  constructor(message: string, statusCode: number, options?: { cause?: unknown }) {
+    super(message, options?.cause ? { cause: options.cause } : undefined);
+    this.name = "ProxyFetchError";
+    this.statusCode = statusCode;
+  }
+}
+
+function resolveFetchTimeoutMs(): number {
+  if (process.env.PROXY_FETCH_TIMEOUT_MS) {
+    const n = Number(process.env.PROXY_FETCH_TIMEOUT_MS);
+    if (Number.isFinite(n) && n > 0) return Math.min(n, 120_000);
+  }
+  return process.env.VERCEL ? 9000 : 25_000;
+}
+
+function responseDataAsUtf8String(data: unknown, targetUrl: string): string {
+  if (typeof data === "string") return data;
+  if (Buffer.isBuffer(data)) return data.toString("utf-8");
+  if (data instanceof ArrayBuffer) return Buffer.from(data).toString("utf-8");
+  throw new ProxyFetchError(`Resposta inesperada (não texto) de ${targetUrl}`, 502);
+}
 
 const RECORDING_SCRIPT = `
         <script>
@@ -190,15 +221,77 @@ const RECORDING_SCRIPT = `
       `;
 
 export async function buildProxiedHtml(targetUrl: string): Promise<string> {
-  const response = await axios.get(targetUrl, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    },
-    timeout: 10000,
-  });
+  let href: URL;
+  try {
+    href = new URL(targetUrl);
+  } catch {
+    throw new ProxyFetchError("URL inválida", 400);
+  }
+  if (href.protocol !== "http:" && href.protocol !== "https:") {
+    throw new ProxyFetchError("Apenas http e https são permitidos", 400);
+  }
 
-  const $ = cheerio.load(response.data);
+  const timeoutMs = resolveFetchTimeoutMs();
+
+  let response;
+  try {
+    response = await axios.get<string>(href.toString(), {
+      headers: {
+        "User-Agent": CHROME_UA,
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+      },
+      timeout: timeoutMs,
+      maxRedirects: 5,
+      maxContentLength: MAX_BODY_BYTES,
+      maxBodyLength: MAX_BODY_BYTES,
+      responseType: "text",
+      validateStatus: (s) => s >= 200 && s < 300,
+    });
+  } catch (e: unknown) {
+    if (isAxiosError(e)) {
+      if (e.code === "ECONNABORTED") {
+        throw new ProxyFetchError(
+          `Timeout ao buscar a página (>${timeoutMs}ms). Tente um site menor ou aumente PROXY_FETCH_TIMEOUT_MS.`,
+          504,
+          { cause: e },
+        );
+      }
+      if (e.response) {
+        const st = e.response.status;
+        throw new ProxyFetchError(
+          `O site respondeu com HTTP ${st} (bloqueio comum para datacenters / bots).`,
+          502,
+          { cause: e },
+        );
+      }
+      throw new ProxyFetchError(
+        `Falha de rede: ${e.message || "erro desconhecido"}`,
+        502,
+        { cause: e },
+      );
+    }
+    throw e;
+  }
+
+  const rawHtml = responseDataAsUtf8String(response.data, href.toString());
+  if (rawHtml.length > MAX_BODY_BYTES) {
+    throw new ProxyFetchError("HTML excede o tamanho máximo permitido pelo proxy", 413);
+  }
+
+  let $: cheerio.CheerioAPI;
+  try {
+    $ = cheerio.load(rawHtml);
+  } catch (e: unknown) {
+    throw new ProxyFetchError("Não foi possível analisar o HTML da página", 422, {
+      cause: e,
+    });
+  }
+
+  if ($("head").length === 0) {
+    $("html").prepend("<head></head>");
+  }
   $("head").prepend(RECORDING_SCRIPT);
 
   $("a, img, link, script, source, video").each((_i, el) => {
@@ -213,7 +306,7 @@ export async function buildProxiedHtml(targetUrl: string): Promise<string> {
         !val.startsWith("#")
       ) {
         try {
-          const absoluteUrl = new URL(val, targetUrl).href;
+          const absoluteUrl = new URL(val, href.href).href;
           $(el).attr(attr, absoluteUrl);
         } catch {
           /* ignore */

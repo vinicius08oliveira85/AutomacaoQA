@@ -1,5 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/proxy.ts": {
+      "maxDuration": 60
+    },
+    "api/replay.ts": {
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
       "source": "/((?!api/).*)",

@@ -4,7 +4,7 @@ import { Server } from "socket.io";
 import { createServer } from "http";
 import path from "path";
 import cors from "cors";
-import { buildProxiedHtml, PROXY_RESPONSE_HEADERS } from "./lib/proxyCore";
+import { buildProxiedHtml, PROXY_RESPONSE_HEADERS, ProxyFetchError } from "./lib/proxyCore";
 
 async function startServer() {
   const app = express();
@@ -33,6 +33,10 @@ async function startServer() {
       }
       res.send(html);
     } catch (error: unknown) {
+      if (error instanceof ProxyFetchError) {
+        res.status(error.statusCode).send(error.message);
+        return;
+      }
       const message = error instanceof Error ? error.message : String(error);
       res.status(500).send("Error fetching URL: " + message);
     }

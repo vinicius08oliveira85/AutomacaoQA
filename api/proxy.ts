@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { buildProxiedHtml, PROXY_RESPONSE_HEADERS } from "../lib/proxyCore";
+import { buildProxiedHtml, PROXY_RESPONSE_HEADERS, ProxyFetchError } from "../lib/proxyCore";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "GET") {
@@ -22,7 +22,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     res.status(200).send(html);
   } catch (e: unknown) {
+    if (e instanceof ProxyFetchError) {
+      res.status(e.statusCode).send(e.message);
+      return;
+    }
     const msg = e instanceof Error ? e.message : String(e);
+    console.error("[api/proxy]", msg, e);
     res.status(500).send("Error fetching URL: " + msg);
   }
 }
