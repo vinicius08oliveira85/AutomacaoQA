@@ -25,6 +25,9 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { io } from "socket.io-client";
 
+/** Dev local (`npm run dev`) usa Socket.IO no mesmo host; em build estático (Vercel) o replay usa só HTTP. */
+const USE_SOCKET = import.meta.env.DEV || Boolean(import.meta.env.VITE_SOCKET_URL);
+
 interface Step {
   id: string;
   command: string;
@@ -42,8 +45,6 @@ interface InspectorData {
     name?: string;
   };
 }
-
-const socket = io();
 
 export default function App() {
   const [url, setUrl] = useState("https://www.google.com");
@@ -112,20 +113,26 @@ export default function App() {
   }, [isInspectorActive]);
 
   useEffect(() => {
-    socket.on("replay_status", (data) => {
-      setLogs(prev => [...prev, { message: data.message, type: data.type }]);
+    if (!USE_SOCKET) return;
+    const socket = import.meta.env.VITE_SOCKET_URL
+      ? io(String(import.meta.env.VITE_SOCKET_URL))
+      : io();
+    socket.on("replay_status", (data: { message: string; type: string; stepId?: string }) => {
+      setLogs((prev) => [...prev, { message: data.message, type: data.type }]);
       if (data.stepId) {
-        setSteps(prev => prev.map(s => 
-          s.id === data.stepId ? { ...s, status: data.type === "step" ? "executing" : "success" } : s
-        ));
+        setSteps((prev) =>
+          prev.map((s) =>
+            s.id === data.stepId ? { ...s, status: data.type === "step" ? "executing" : "success" } : s
+          )
+        );
       }
       if (data.type === "success" || data.type === "error") {
         setIsReplaying(false);
       }
     });
-
     return () => {
       socket.off("replay_status");
+      socket.disconnect();
     };
   }, []);
 
@@ -161,19 +168,51 @@ export default function App() {
     setLogs(prev => [...prev, { message: "Recording stopped", type: "info" }]);
   };
 
+  const applyReplayEvent = (data: { message: string; type: string; stepId?: string }) => {
+    setLogs((prev) => [...prev, { message: data.message, type: data.type }]);
+    if (data.stepId) {
+      setSteps((prev) =>
+        prev.map((s) =>
+          s.id === data.stepId ? { ...s, status: data.type === "step" ? "executing" : "success" } : s
+        )
+      );
+    }
+    if (data.type === "success" || data.type === "error") {
+      setIsReplaying(false);
+    }
+  };
+
   const runReplay = async () => {
     setIsReplaying(true);
     setLogs([]);
-    setSteps(prev => prev.map(s => ({ ...s, status: "pending" })));
-    
+    setSteps((prev) => prev.map((s) => ({ ...s, status: "pending" })));
+
     try {
-      await fetch("/api/replay", {
+      const res = await fetch("/api/replay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ steps })
+        body: JSON.stringify({ steps }),
       });
-    } catch (error) {
-      setLogs(prev => [...prev, { message: "Replay failed to start", type: "error" }]);
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      if (!USE_SOCKET) {
+        const data = (await res.json()) as {
+          events?: Array<{ message: string; type: string; stepId?: string }>;
+        };
+        const evs = data.events ?? [];
+        for (const ev of evs) {
+          applyReplayEvent(ev);
+          await new Promise((r) => setTimeout(r, 800));
+        }
+        setIsReplaying(false);
+      } else {
+        await res.json().catch(() => ({}));
+      }
+    } catch {
+      setLogs((prev) => [...prev, { message: "Replay failed to start", type: "error" }]);
       setIsReplaying(false);
     }
   };

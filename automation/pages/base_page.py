@@ -37,6 +37,10 @@ _CONSOLE_SEVERE_IGNORADOS_PADRAO: Tuple[str, ...] = (
     "frame-ancestors",
     "frame ancestor",
     "index-bclnwxwi.js",
+    "favicon.ico",
+    "/api/proxy",
+    "api/proxy",
+    "automacao-qa.vercel.app/socket.io",
 )
 
 
