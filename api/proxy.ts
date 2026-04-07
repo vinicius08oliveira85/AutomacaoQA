@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { buildProxiedHtml, PROXY_RESPONSE_HEADERS, ProxyFetchError } from "../lib/proxyCore";
+import { buildProxiedHtml, PROXY_RESPONSE_HEADERS, ProxyFetchError } from "./_lib/proxyCore";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "GET") {

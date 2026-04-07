@@ -4,7 +4,7 @@ import { Server } from "socket.io";
 import { createServer } from "http";
 import path from "path";
 import cors from "cors";
-import { buildProxiedHtml, PROXY_RESPONSE_HEADERS, ProxyFetchError } from "./lib/proxyCore";
+import { buildProxiedHtml, PROXY_RESPONSE_HEADERS, ProxyFetchError } from "./api/_lib/proxyCore";
 
 async function startServer() {
   const app = express();

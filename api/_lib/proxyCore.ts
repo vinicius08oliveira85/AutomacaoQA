@@ -1,5 +1,6 @@
 /**
- * HTML da página alvo com script de gravação injetado — usado pelo Express (dev) e pelas funções Vercel.
+ * HTML da página alvo com script de gravação injetado — usado pelo Express (dev) e por api/proxy na Vercel.
+ * Vive sob api/_lib para ser incluído no bundle da função serverless.
  */
 import axios, { isAxiosError } from "axios";
 import * as cheerio from "cheerio";
