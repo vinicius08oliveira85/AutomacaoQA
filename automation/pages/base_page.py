@@ -14,7 +14,11 @@ from typing_extensions import Self
 
 Locator = Tuple[str, str]
 
-# Ruído comum em hom (Socket.io 404, CSP) — SEVERE ainda aparece no console, mas a UI pode estar ok (estilo IDE).
+# Tempo máximo aguardando document.readyState === "complete" antes de seguir para o elemento visual
+# (evita ficar preso se Socket.io/API falhar em loop e o documento nunca “completar” como em SPA).
+_READYSTATE_COMPLETE_ESPERA_MAX_S = 5
+
+# Ruído comum em hom (Socket.io 404, CSP, frames, bundle hashed) — SEVERE no console, UI ainda utilizável (estilo IDE).
 _CONSOLE_SEVERE_IGNORADOS_PADRAO: Tuple[str, ...] = (
     "content security policy",
     "content-security-policy",
@@ -27,6 +31,12 @@ _CONSOLE_SEVERE_IGNORADOS_PADRAO: Tuple[str, ...] = (
     " 404 ",
     " 404 (",
     "status of 404",
+    "unsafe attempt to load url",
+    "unsafe attempt to load frame",
+    "chrome-error://",
+    "frame-ancestors",
+    "frame ancestor",
+    "index-bclnwxwi.js",
 )
 
 
@@ -79,14 +89,15 @@ class BasePage:
 
     def wait_document_ready(self, locator_principal: Locator | None = None) -> Self:
         """
-        Espera resiliente (estilo Selenium IDE): não trava só porque Socket.io/API falhou.
-        Tenta `complete` com timeout curto; em seguida exige o elemento principal (ex.: body) ou `interactive|complete`.
+        Espera resiliente (estilo Selenium IDE): não trava só porque Socket.io/API falhou em loop.
+        Aguarda no máximo `_READYSTATE_COMPLETE_ESPERA_MAX_S` por `complete`; se não vier, segue para o
+        elemento visual (body por padrão) ou `interactive|complete`.
         """
         loc = locator_principal or (By.TAG_NAME, "body")
         driver = self.driver
-        curto = min(8, max(3, self.explicit_wait // 3))
+        espera_ready = min(_READYSTATE_COMPLETE_ESPERA_MAX_S, max(1, self.explicit_wait))
         try:
-            WebDriverWait(driver, curto).until(
+            WebDriverWait(driver, espera_ready).until(
                 lambda d: d.execute_script("return document.readyState") == "complete"
             )
         except TimeoutException:
@@ -157,7 +168,9 @@ class BasePage:
         Lê `get_log('browser')` e falha se houver entradas SEVERE relevantes (404 de API, CSP, exceções JS, etc.).
 
         Padrões em `_CONSOLE_SEVERE_IGNORADOS_PADRAO` reduzem falso positivo quando a UI já carregou mas o
-        ambiente ainda registra CSP/Socket.io (alinhado ao `wait_document_ready` resiliente).
+        ambiente ainda registra CSP/Socket.io, frames inseguros, `chrome-error://` ou bundles (ex.: index-*.js),
+        alinhado ao `wait_document_ready` resiliente. Chame após cada navegação de rota para validar só o delta
+        de logs desde a última leitura (comportamento típico do ChromeDriver).
         """
         try:
             logs = self.driver.get_log("browser")

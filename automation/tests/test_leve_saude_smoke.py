@@ -1,4 +1,9 @@
-"""Testes estilo Selenium IDE: só encadeamento de métodos nas Page Objects."""
+"""Testes estilo Selenium IDE: só encadeamento de métodos nas Page Objects.
+
+Após cada mudança de rota (`open`, `ir_para_login`, `abrir`, pós-`clicar_entrar`), encadeia
+`verificar_sem_erros_no_console()` para inspecionar o lote de logs desde a última leitura, com os
+padrões de infraestrutura filtrados em `_CONSOLE_SEVERE_IGNORADOS_PADRAO` (CSP, socket.io, frames, etc.).
+"""
 
 from __future__ import annotations
 
@@ -33,6 +38,7 @@ class TestLeveSaudeSmoke(BaseTest):
             .verificar_sem_erros_no_console()
             .preencher_credenciais(u, s)
             .clicar_entrar()
+            .verificar_sem_erros_no_console()
             .verificar_dashboard()
         )
 
@@ -46,7 +52,9 @@ class TestLeveSaudeSmoke(BaseTest):
             .ir_para_login()
             .verificar_sem_erros_no_console()
             .fazer_login(u, s)
+            .verificar_sem_erros_no_console()
             .check_se_logado()
+            .verificar_sem_erros_no_console()
         )
 
     def test_login_page_fixture_encadeado(self, login_page):
